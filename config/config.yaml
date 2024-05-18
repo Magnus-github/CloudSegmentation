@@ -1,0 +1,34 @@
+dataset:
+    name: dataset:Clouds # required format: <module_name>:<object_name>
+    classes: ['CLEAR', 'CLOUD']
+    label_colors: [[0, 0, 0], [255, 255, 255]]
+    params:
+        data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        scenes_folder: subscenes
+        masks_folder: masks
+        num_folds: 5
+        image_size: 224
+        overlap: 112
+    train_params:
+        transform: scripts.transforms:TrainTransform # required format: <module_name>:<object_name>
+        split: train
+    val_params:
+        transform: scripts.transforms:ValTransform # required format: <module_name>:<object_name>
+        split: val
+model:
+    name: scripts.model:CloudSegmentationModel # required format: <module_name>:<object_name>
+    save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
+    in_params:
+        num_classes: 2
+hparams:
+    epochs: 30
+    batch_size: 4
+    criterion:
+        name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
+        in_params: {}
+    optimizer: 
+        name: torch.optim:Adam
+        in_params:
+            lr: 0.001
+wandb:
+    enable: false
