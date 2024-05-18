@@ -33,8 +33,8 @@ class Clouds(Dataset):
 
         self._transform = str_to_class(transform)(image_size, overlap) if transform else BaseTransform
 
-        all_scene_files = sorted(os.listdir(self._scenes_folder))[513:]
-        all_mask_files = sorted(os.listdir(self._masks_folder))[513:]
+        all_scene_files = sorted(os.listdir(self._scenes_folder))
+        all_mask_files = sorted(os.listdir(self._masks_folder))
 
         skf = KFold(n_splits=num_folds, shuffle=True, random_state=random_state)
         splits = list(skf.split(all_scene_files, all_mask_files))
@@ -60,13 +60,13 @@ class Clouds(Dataset):
         # get only desired bands (RGB and NIR; bands 4, 3, 2, 8)
         scene = scene[:,:,[3,2,1,7]]
         mask = np.load(os.path.join(self._masks_folder, mask_file))
-        # merge 'CLEAR' and 'CLOUD_SHADOW' classes and only use 'CLOUD' mask (using both would be redundant)
+        # merge 'CLEAR' and 'CLOUD_SHADOW' classes and keep only 'CLOUD' class
         clear = mask[:,:,0] + mask[:,:,2]
         mask[:,:,0] = clear
         mask = mask[:,:,1][:,:,None]
 
         scene = torch.tensor(scene.transpose(2,0,1), dtype=torch.float32)
-        mask = torch.tensor(mask.transpose(2,0,1), dtype=torch.int8)
+        mask = torch.tensor(mask.transpose(2,0,1), dtype=torch.long)
 
         tiled_tf_scene, tiled_tf_mask = self._transform(image=scene, mask=mask)
 

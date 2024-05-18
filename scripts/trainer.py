@@ -80,29 +80,12 @@ class Trainer:
                         "Validation accuracy": val_acc,
                         "Epoch": epoch,
                     }
-                )
+                )            
 
-            running_loss = 0.0
-
-            val_losses.append(val_loss)
-            if len(val_losses) > self._cfg.hparams.early_stopping.patience:
-                val_losses.pop(0)
-
-                if self._cfg.hparams.early_stopping.enable and epoch > self._cfg.hparams.early_stopping.after_epoch:
-                    y = np.array(val_losses)
-                    slope, _ = np.polyfit(x, y, 1)
-                    if slope > self._cfg.hparams.early_stopping.slope_threshold:
-                        self.logger.info(f"Early stopping at epoch {epoch}.")
-                        self.save_model(epoch=epoch)
-                        break
-
-                if val_loss < best_val_loss and val_loss < self._cfg.hparams.save_best_threshold:
-                    self.logger.info("Saving best model!")
-                    best_val_loss = val_loss
-                    self.save_model(best=True)
-
-            if epoch % self._cfg.hparams.save_interval == 0:
-                self.save_model(epoch=epoch)
+            if val_loss < best_val_loss and val_loss < self._cfg.hparams.save_best_threshold:
+                self.logger.info("Saving best model!")
+                best_val_loss = val_loss
+                self.save_model(best=True)
 
         self.save_model()
 
@@ -124,21 +107,21 @@ class Trainer:
                 running_label += labeled.sum()
                 running_correct += correct
 
-                if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
-                    self.logger.info("Visualizing!")
-                    figure = plt.figure(1)
-                    plt.subplot(131)
-                    plt.imshow(images[0].permute(1, 2, 0).to("cpu"))
-                    plt.title("Image")
-                    plt.subplot(132)
-                    plt.imshow(masks[0].to("cpu"))
-                    plt.title("Ground truth mask")
-                    plt.subplot(133)
-                    plt.imshow(outputs[0].argmax(0).to("cpu"))
-                    plt.title("Predicted mask")
+                # if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
+                #     self.logger.info("Visualizing!")
+                #     figure = plt.figure(1)
+                #     plt.subplot(131)
+                #     plt.imshow(images[0].permute(1, 2, 0).to("cpu"))
+                #     plt.title("Image")
+                #     plt.subplot(132)
+                #     plt.imshow(masks[0].to("cpu"))
+                #     plt.title("Ground truth mask")
+                #     plt.subplot(133)
+                #     plt.imshow(outputs[0].argmax(0).to("cpu"))
+                #     plt.title("Predicted mask")
 
-                    self.run_wandb.log({"test_img_{i}".format(i=i): figure})
-                    plt.close()
+                #     self.run_wandb.log({"test_img_{i}".format(i=i): figure})
+                #     plt.close()
 
             val_loss = running_loss / len(self.val_dataloader)
             val_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
@@ -148,9 +131,19 @@ class Trainer:
         return val_loss, val_acc
 
     def compute_accuracy(self, target: torch.Tensor, outputs: torch.Tensor, num_classes: int):
-        labeled = (target > 0) * (target <= num_classes)
-        _, preds = torch.max(outputs.data, 1)
-        correct = ((preds == target) * labeled).sum().item()
+        """
+        Compute pixel-wise accuracy for semantic segmentation.
+
+        Args:
+            target (torch.Tensor): Ground truth masks [N, H, W]
+            outputs (torch.Tensor): Predicted masks [N, C, H, W]
+            num_classes (int): Number of classes [C]
+        """
+        labeled = target.ne(0)
+        correct = (outputs.argmax(1) == target).float()
+        correct = (correct * labeled).sum()
+        labeled = labeled.sum()
+
         return labeled, correct
 
     def save_model(self, best: bool = False, epoch: Optional[int] = None):
@@ -166,8 +159,7 @@ class Trainer:
             name = model_name + f"_{epoch}.pth"
 
         save_path = os.path.join(self._cfg.model.save_path, folder)
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        os.makedirs(save_path, exist_ok=True)
 
         torch.save(self.model.state_dict(), os.path.join(save_path, name))
 

@@ -22,7 +22,8 @@ model:
         num_classes: 2
 hparams:
     epochs: 30
-    batch_size: 4
+    batch_size: 1
+    save_best_threshold: 0.3
     criterion:
         name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
         in_params: {}
