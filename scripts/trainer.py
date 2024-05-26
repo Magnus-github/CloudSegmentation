@@ -60,7 +60,7 @@ class Trainer:
 
                 loss.backward()
                 self.optimizer.step()
-                self.scheduler.step()
+                # self.scheduler.step()
 
                 if self.run_wandb:
                     self.run_wandb.log({"Train loss [batch]": running_loss / (i + 1)})
@@ -98,7 +98,7 @@ class Trainer:
             running_loss = 0.0
             running_label = 0
             running_correct = 0
-            for i, (images, masks) in enumerate(self.val_dataloader):
+            for i, (images, masks) in enumerate(tqdm(self.val_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
                 outputs = self.model(images)["out"]
                 loss = self.criterion(outputs, masks)
@@ -131,14 +131,6 @@ class Trainer:
         return val_loss, val_acc
 
     def compute_accuracy(self, target: torch.Tensor, outputs: torch.Tensor, num_classes: int):
-        """
-        Compute pixel-wise accuracy for semantic segmentation.
-
-        Args:
-            target (torch.Tensor): Ground truth masks [N, H, W]
-            outputs (torch.Tensor): Predicted masks [N, C, H, W]
-            num_classes (int): Number of classes [C]
-        """
         labeled = target.ne(0)
         correct = (outputs.argmax(1) == target).float()
         correct = (correct * labeled).sum()
@@ -165,6 +157,8 @@ class Trainer:
 
 
 if __name__ == "__main__":
+    import coloredlogs
+    coloredlogs.install(level=logging.INFO, fmt="[%(asctime)s] [%(name)s] [%(module)s] [%(levelname)s] %(message)s")
     cfg = omegaconf.OmegaConf.load("config/config.yaml")
     dataloaders = get_dataloaders(cfg)
 

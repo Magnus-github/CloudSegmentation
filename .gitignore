@@ -2,3 +2,4 @@ venv/
 training/
 *.png
 *__pycache__/
+model/

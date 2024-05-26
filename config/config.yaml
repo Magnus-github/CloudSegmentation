@@ -3,7 +3,8 @@ dataset:
     classes: ['CLEAR', 'CLOUD']
     label_colors: [[0, 0, 0], [255, 255, 255]]
     params:
-        data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        # data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        data_folder: /Midgard/Data/tibbe/datasets/Sentinel2
         scenes_folder: subscenes
         masks_folder: masks
         num_folds: 5
@@ -17,7 +18,8 @@ dataset:
         split: val
 model:
     name: scripts.model:CloudSegmentationModel # required format: <module_name>:<object_name>
-    save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
+    # save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
+    save_path: /local_storage/users/tibbe/Zaitra_Challenge/model
     in_params:
         num_classes: 2
 hparams:
