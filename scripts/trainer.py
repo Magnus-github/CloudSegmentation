@@ -6,6 +6,9 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import matplotlib.pyplot as plt
+from torchvision.utils import save_image
+
+import time
 
 import omegaconf
 from typing import Optional
@@ -23,15 +26,18 @@ class Trainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = str_to_class(cfg.model.name)(**cfg.model.in_params)
         self.model.to(self.device)
+        if cfg.model.load_weights.enable:
+            self.model.load_state_dict(torch.load(cfg.model.load_weights.path, map_location=self.device))
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
+        self.test_dataloader = dataloaders["test"]
         self.criterion = str_to_class(cfg.hparams.criterion.name)(**cfg.hparams.criterion.in_params)
         self.optimizer = str_to_class(cfg.hparams.optimizer.name)(self.model.parameters(), **cfg.hparams.optimizer.in_params)
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(level=logging.INFO)
         if cfg.wandb.enable:
-            self.run_wandb = wandb.init(project="semantic-segmentation", config=dict(cfg))
+            self.run_wandb = wandb.init(project="Zaitra_CloudSegmentation", config=dict(cfg))
             self.run_wandb.watch(self.model)
         else:
             self.run_wandb = None
@@ -50,6 +56,7 @@ class Trainer:
                 self.optimizer.zero_grad()
 
                 outputs = self.model(images)["out"]
+                print(outputs.shape, masks.shape)
 
                 loss = self.criterion(outputs, masks)
                 running_loss += loss.item()
@@ -129,6 +136,34 @@ class Trainer:
         self.model.train()
 
         return val_loss, val_acc
+    
+
+    def test(self):
+        self.model.eval()
+        with torch.no_grad():
+            running_label = 0
+            running_correct = 0
+            for i, (images, masks) in enumerate(tqdm(self.test_dataloader)):
+                images, masks = images.to(self.device), masks.to(self.device)
+                outputs = self.model(images)["out"]
+                labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
+                running_label += labeled.sum()
+                running_correct += correct
+                pred = outputs.argmax(1).float()
+
+                im = images[:5,:3].to("cpu")
+                im -= im.min(1, keepdim=True)[0]
+                im /= im.max(1, keepdim=True)[0]
+
+                save_image(im, f"test_image.png")
+                save_image(masks[:5].unsqueeze(1).to("cpu"), f"test_mask.png")
+                save_image(pred[:5].unsqueeze(1).to("cpu"), f"test_pred.png")
+
+            test_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
+
+        self.logger.info(f"Test Accuracy: {test_acc}")
+
+
 
     def compute_accuracy(self, target: torch.Tensor, outputs: torch.Tensor, num_classes: int):
         labeled = target.ne(0)
@@ -163,4 +198,4 @@ if __name__ == "__main__":
     dataloaders = get_dataloaders(cfg)
 
     trainer = Trainer(cfg, dataloaders)
-    trainer.train()
+    trainer.test()

@@ -3,32 +3,40 @@ dataset:
     classes: ['CLEAR', 'CLOUD']
     label_colors: [[0, 0, 0], [255, 255, 255]]
     params:
-        # data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
-        data_folder: /Midgard/Data/tibbe/datasets/Sentinel2
+        data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        # data_folder: /Midgard/Data/tibbe/datasets/Sentinel2
         scenes_folder: subscenes
         masks_folder: masks
         num_folds: 5
         image_size: 224
-        overlap: 112
+        overlap: 0
+        mean: [0.3612, 0.3414, 0.3745, 0.3913]
+        std: [0.0848, 0.0724, 0.0714, 0.0890]
     train_params:
         transform: scripts.transforms:TrainTransform # required format: <module_name>:<object_name>
         split: train
     val_params:
         transform: scripts.transforms:ValTransform # required format: <module_name>:<object_name>
         split: val
+    test_params:
+        transform: scripts.transforms:ValTransform # required format: <module_name>:<object_name>
+        split: test
 model:
     name: scripts.model:CloudSegmentationModel # required format: <module_name>:<object_name>
-    # save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
-    save_path: /local_storage/users/tibbe/Zaitra_Challenge/model
+    save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
+    # save_path: /local_storage/users/tibbe/Zaitra_Challenge/model
     in_params:
         num_classes: 2
+    load_weights:
+        enable: false
+        path: model/CloudSegmentationModel_final_norm.pth
 hparams:
     epochs: 30
     batch_size: 1
     save_best_threshold: 0.3
     criterion:
         name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
-        in_params: {}
+        in_params: {reduction: 'none'}
     optimizer: 
         name: torch.optim:Adam
         in_params:
