@@ -77,7 +77,7 @@ class Clouds(Dataset):
         mask = mask[:,:,1][:,:,None]
 
         scene = torch.tensor(scene.transpose(2,0,1), dtype=torch.float32)
-        mask = torch.tensor(mask.transpose(2,0,1), dtype=torch.float32)
+        mask = torch.tensor(mask.transpose(2,0,1), dtype=torch.long)
 
         tiled_tf_scene, tiled_tf_mask = self._transform(image=scene, mask=mask)
 
