@@ -91,7 +91,7 @@ def collate_fn(batch):
     return scenes, masks
 
 
-def get_dataloaders(cfg: omegaconf.DictConfig, fold: int = 0):
+def get_dataloaders(cfg: omegaconf.DictConfig, fold: int = 0) -> dict[str, DataLoader]:
     train_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.train_params,fold=fold)
     val_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.val_params,fold=fold)
     test_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.test_params,fold=fold)

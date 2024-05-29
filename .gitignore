@@ -3,3 +3,6 @@ training/
 *.png
 *__pycache__/
 model/
+logs/
+wandb/
+slurm/

@@ -8,7 +8,7 @@ import wandb
 import matplotlib.pyplot as plt
 from torchvision.utils import save_image
 
-import time
+from collections import OrderedDict
 
 import omegaconf
 from typing import Optional
@@ -33,11 +33,11 @@ class Trainer:
         self.test_dataloader = dataloaders["test"]
         self.criterion = str_to_class(cfg.hparams.criterion.name)(**cfg.hparams.criterion.in_params)
         self.optimizer = str_to_class(cfg.hparams.optimizer.name)(self.model.parameters(), **cfg.hparams.optimizer.in_params)
-
+        self.scheduler = str_to_class(cfg.hparams.scheduler.name)(self.optimizer, **cfg.hparams.scheduler.in_params)
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(level=logging.INFO)
         if cfg.wandb.enable:
-            self.run_wandb = wandb.init(project="Zaitra_CloudSegmentation", config=dict(cfg))
+            self.run_wandb = wandb.init(project=cfg.wandb.project_name, config=dict(cfg))
             self.run_wandb.watch(self.model)
         else:
             self.run_wandb = None
@@ -55,10 +55,13 @@ class Trainer:
                 images, masks = images.to(self.device), masks.to(self.device)
                 self.optimizer.zero_grad()
 
-                outputs = self.model(images)["out"]
-                print(outputs.shape, masks.shape)
+                outputs = self.model(images)
+                if type(outputs) == OrderedDict:
+                    outputs = outputs["out"]
 
-                loss = self.criterion(outputs, masks)
+                prob = outputs.sigmoid().squeeze(1)
+
+                loss = self.criterion(prob, masks)
                 running_loss += loss.item()
 
                 labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
@@ -67,14 +70,14 @@ class Trainer:
 
                 loss.backward()
                 self.optimizer.step()
-                # self.scheduler.step()
+                self.scheduler.step()
 
                 if self.run_wandb:
                     self.run_wandb.log({"Train loss [batch]": running_loss / (i + 1)})
 
             train_loss = running_loss / len(self.train_dataloader)
             train_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
-            val_loss, val_acc = self.validate(epoch)
+            val_loss, val_acc, val_iou = self.validate(epoch)
 
             self.logger.info(f"Epoch: {epoch}, Loss: {train_loss}, Accuracy: {train_acc}")
             self.logger.info(f"Validation Loss: {val_loss}, Validation Accuracy: {val_acc}")
@@ -85,6 +88,8 @@ class Trainer:
                         "Train Accuracy": train_acc,
                         "Validation loss": val_loss,
                         "Validation accuracy": val_acc,
+                        "Validation IoU": val_iou,
+                        "Learning rate": self.optimizer.param_groups[0]["lr"],
                         "Epoch": epoch,
                     }
                 )            
@@ -105,14 +110,21 @@ class Trainer:
             running_loss = 0.0
             running_label = 0
             running_correct = 0
+            running_iou = 0
             for i, (images, masks) in enumerate(tqdm(self.val_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
-                outputs = self.model(images)["out"]
-                loss = self.criterion(outputs, masks)
+                outputs = self.model(images)
+                if type(outputs) == OrderedDict:
+                    outputs = outputs["out"]
+                prob = outputs.sigmoid().squeeze(1)
+                loss = self.criterion(prob, masks)
                 running_loss += loss.item()
                 labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
                 running_label += labeled.sum()
                 running_correct += correct
+                # pred = outputs.softmax(1)[:,1]
+                pred = (prob > 0.5).float()
+                running_iou += self.compute_iou(pred, masks)
 
                 # if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
                 #     self.logger.info("Visualizing!")
@@ -132,10 +144,11 @@ class Trainer:
 
             val_loss = running_loss / len(self.val_dataloader)
             val_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
+            val_iou = running_iou / len(self.val_dataloader)
 
         self.model.train()
 
-        return val_loss, val_acc
+        return val_loss, val_acc, val_iou
     
 
     def test(self):
@@ -145,11 +158,14 @@ class Trainer:
             running_correct = 0
             for i, (images, masks) in enumerate(tqdm(self.test_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
-                outputs = self.model(images)["out"]
+                outputs = self.model(images)
+                if type(outputs) == OrderedDict:
+                    outputs = outputs["out"]
                 labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
                 running_label += labeled.sum()
                 running_correct += correct
-                pred = outputs.argmax(1).float()
+                prob = outputs.sigmoid().squeeze(1)
+                pred = (prob > 0.5).float()
 
                 im = images[:5,:3].to("cpu")
                 im -= im.min(1, keepdim=True)[0]
@@ -163,11 +179,24 @@ class Trainer:
 
         self.logger.info(f"Test Accuracy: {test_acc}")
 
-
+    def compute_iou(self, pred: torch.Tensor, true: torch.Tensor)  -> float:
+        eps=1e-6
+        pred = pred.int().cpu()
+        true = true.int().cpu()
+        intersection = (pred & true).float().sum((1, 2))
+        union = (pred | true).float().sum((1, 2))
+        
+        iou = (intersection + eps) / (union + eps)
+        
+        # thresholded = torch.clamp(20 * (iou - 0.5), 0, 10).ceil() / 10  # This is equal to comparing with thresolds
+        
+        return iou.mean().item()
 
     def compute_accuracy(self, target: torch.Tensor, outputs: torch.Tensor, num_classes: int):
         labeled = target.ne(0)
-        correct = (outputs.argmax(1) == target).float()
+        pred = outputs.sigmoid().squeeze(1)
+        pred = (pred > 0.5).float()
+        correct = (pred == target).float()
         correct = (correct * labeled).sum()
         labeled = labeled.sum()
 
@@ -198,4 +227,4 @@ if __name__ == "__main__":
     dataloaders = get_dataloaders(cfg)
 
     trainer = Trainer(cfg, dataloaders)
-    trainer.test()
+    trainer.train()
