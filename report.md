@@ -1,0 +1,1 @@
+https://drivendata.co/blog/cloud-cover-benchmark/

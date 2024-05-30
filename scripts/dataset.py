@@ -70,6 +70,8 @@ class Clouds(Dataset):
         scene = np.load(os.path.join(self._scenes_folder, scene_file))
         # get only desired bands (RGB and NIR; bands 4, 3, 2, 8)
         scene = scene[:,:,[3,2,1,7]]
+        # normalize to [0, 1]
+        scene = (scene - scene.min()) / (scene.max() - scene.min())
         mask = np.load(os.path.join(self._masks_folder, mask_file))
         # merge 'CLEAR' and 'CLOUD_SHADOW' classes and keep only 'CLOUD' class
         clear_mask = mask[:,:,0] + mask[:,:,2]
@@ -95,6 +97,14 @@ def get_dataloaders(cfg: omegaconf.DictConfig, fold: int = 0) -> dict[str, DataL
     train_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.train_params,fold=fold)
     val_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.val_params,fold=fold)
     test_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.test_params,fold=fold)
+    for f_train in train_dataset._scenes_files:
+        for f_val in val_dataset._scenes_files:
+            assert f_train != f_val, f"File {f_train} is in both train and val datasets"
+        for f_test in test_dataset._scenes_files:
+            assert f_train != f_test, f"File {f_train} is in both train and test datasets"
+    for f_val in val_dataset._scenes_files:
+        for f_test in test_dataset._scenes_files:
+            assert f_val != f_test, f"File {f_val} is in both val and test datasets"
     train_dataloader = DataLoader(train_dataset, batch_size=cfg.hparams.batch_size, shuffle=True, collate_fn=collate_fn)
     val_dataloader = DataLoader(val_dataset, batch_size=cfg.hparams.batch_size, shuffle=False, collate_fn=collate_fn)
     test_dataloader = DataLoader(test_dataset, batch_size=cfg.hparams.batch_size, shuffle=False, collate_fn=collate_fn)
@@ -126,8 +136,20 @@ if __name__ == "__main__":
     cfg = omegaconf.OmegaConf.load("config/config.yaml")
     dataloaders = get_dataloaders(cfg)
 
-    for i, (scene, mask) in enumerate(dataloaders["train"]):
+    for file in dataloaders["test"].dataset._scenes_files:
+        scene = np.load(os.path.join(dataloaders["test"].dataset._scenes_folder, file))
+        mask = np.load(os.path.join(dataloaders["test"].dataset._masks_folder, file))
+
+        with open("/Volumes/MAGNUS_USB/Zaitra_Challenge/data/test/scenes/" + file, "wb") as f:
+            np.save(f, scene)
+        with open("/Volumes/MAGNUS_USB/Zaitra_Challenge/data/test/masks/" + file, "wb") as f:
+            np.save(f, mask)
+
+    exit()
+    for i, (scene, mask) in enumerate(dataloaders["test"]):
         print(scene.shape, mask.shape)
+
+
 
         save_image(scene[:5,:3], f"scene.png")
         save_image(mask[:5,0].unsqueeze(1).float(), f"mask_clear.png")

@@ -32,12 +32,12 @@ class TrainTransform(BaseTransform):
                 transforms.RandomHorizontalFlip(),
                 transforms.RandomVerticalFlip(),
                 transforms.RandomRotation(degrees=60),
-                transforms.RandomResizedCrop(imsize, scale=(0.8, 1.0)),
+                # transforms.RandomResizedCrop(imsize, scale=(0.8, 1.0)),
             ]
         )
 
     def __call__(self, image: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        image = self.normalize(image)
+        # image = self.normalize(image)
         tiled_im = self._tile(image)
         tiled_mask = self._tile(mask)
         tiled_mask = tv_tensors.Mask(tiled_mask)
@@ -50,7 +50,7 @@ class ValTransform(BaseTransform):
         super(ValTransform, self).__init__(imsize, overlap, mean, std)
 
     def __call__(self, image: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        image = self.normalize(image)
+        # image = self.normalize(image)
         tiled_im = self._tile(image)
         tiled_mask = self._tile(mask)
         return tiled_im, tiled_mask
