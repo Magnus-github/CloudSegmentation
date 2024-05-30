@@ -37,7 +37,7 @@ class Trainer:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(level=logging.INFO)
         if cfg.wandb.enable:
-            self.run_wandb = wandb.init(project=cfg.wandb.project_name, config=dict(cfg))
+            self.run_wandb = wandb.init(project=cfg.wandb.project_name, name=cfg.wandb.run_name, config=dict(cfg))
             self.run_wandb.watch(self.model)
         else:
             self.run_wandb = None
@@ -49,8 +49,6 @@ class Trainer:
         best_val_loss = np.inf
         for epoch in range(self._cfg.hparams.epochs):
             running_loss = 0.0
-            running_label = 0
-            running_correct = 0
             running_acc = 0.0
             for i, (images, masks) in enumerate(tqdm(self.train_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
@@ -68,10 +66,6 @@ class Trainer:
                 acc = self.accuracy_metric(prob.argmax(1), masks)
                 running_acc += acc
 
-                # labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
-                # running_label += labeled.sum()
-                # running_correct += correct
-
                 loss.backward()
                 self.optimizer.step()
                 # self.scheduler.step()
@@ -80,9 +74,8 @@ class Trainer:
                     self.run_wandb.log({"Train loss [batch]": running_loss / (i + 1)})
 
             train_loss = running_loss / len(self.train_dataloader)
-            # train_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
             train_acc = running_acc / len(self.train_dataloader)
-            val_loss, val_acc, val_iou = self.validate()
+            val_loss, val_acc, val_iou = self.validate(epoch)
 
             self.logger.info(f"Epoch: {epoch}, Loss: {train_loss}, Accuracy: {train_acc}")
             self.logger.info(f"Validation Loss: {val_loss}, Validation Accuracy: {val_acc}")
@@ -104,19 +97,18 @@ class Trainer:
                 best_val_loss = val_loss
                 self.save_model(best=True)
 
+
         self.save_model()
 
         if self.run_wandb:
             self.run_wandb.finish()
 
-    def validate(self):
+    def validate(self,epoch: int = 0) -> tuple[float, float, float]:
         self.model.eval()
         with torch.no_grad():
             running_loss = 0.0
-            running_label = 0
-            running_correct = 0
             running_acc = 0.0
-            running_iou = 0
+            running_iou = 0.0
             for i, (images, masks) in enumerate(tqdm(self.val_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
                 outputs = self.model(images)
@@ -128,31 +120,25 @@ class Trainer:
                 pred = prob.argmax(1)
                 acc = self.accuracy_metric(pred, masks)
                 running_acc += acc
-                # labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
-                # running_label += labeled.sum()
-                # running_correct += correct
-                # pred = outputs.softmax(1)[:,1]
-                # pred = (prob > 0.5).float()
                 running_iou += self.compute_iou(pred, masks)
 
-                # if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
-                #     self.logger.info("Visualizing!")
-                #     figure = plt.figure(1)
-                #     plt.subplot(131)
-                #     plt.imshow(images[0].permute(1, 2, 0).to("cpu"))
-                #     plt.title("Image")
-                #     plt.subplot(132)
-                #     plt.imshow(masks[0].to("cpu"))
-                #     plt.title("Ground truth mask")
-                #     plt.subplot(133)
-                #     plt.imshow(outputs[0].argmax(0).to("cpu"))
-                #     plt.title("Predicted mask")
+                if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
+                    self.logger.info("Visualizing!")
+                    figure = plt.figure(1)
+                    plt.subplot(131)
+                    plt.imshow(images[0].permute(1, 2, 0).to("cpu"))
+                    plt.title("Image")
+                    plt.subplot(132)
+                    plt.imshow(masks[0].to("cpu"))
+                    plt.title("Ground truth mask")
+                    plt.subplot(133)
+                    plt.imshow(pred[0].to("cpu"))
+                    plt.title("Predicted mask")
 
-                #     self.run_wandb.log({"test_img_{i}".format(i=i): figure})
-                #     plt.close()
+                    self.run_wandb.log({"test_img_{i}".format(i=i): figure})
+                    plt.close()
 
             val_loss = running_loss / len(self.val_dataloader)
-            # val_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
             val_acc = running_acc / len(self.val_dataloader)
             val_iou = running_iou / len(self.val_dataloader)
 
@@ -164,19 +150,18 @@ class Trainer:
     def test(self):
         self.model.eval()
         with torch.no_grad():
-            running_label = 0
-            running_correct = 0
+            running_acc = 0.0
+            running_iou = 0.0
             for i, (images, masks) in enumerate(tqdm(self.test_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
                 outputs = self.model(images)
                 if type(outputs) == OrderedDict:
                     outputs = outputs["out"]
-                labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
-                running_label += labeled.sum()
-                running_correct += correct
                 prob = outputs.sigmoid()
-                # pred = (prob > 0.5).float()
                 pred = prob.argmax(1)
+                acc = self.accuracy_metric(pred, masks)
+                running_acc += acc
+                running_iou += self.compute_iou(pred, masks)
 
                 im = images[:5,:3].to("cpu")
                 im -= im.min(1, keepdim=True)[0]
@@ -186,9 +171,10 @@ class Trainer:
                 save_image(masks[:5].unsqueeze(1).to("cpu"), f"test_mask.png")
                 save_image(pred[:5].unsqueeze(1).to("cpu"), f"test_pred.png")
 
-            test_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
+            test_acc = running_acc / len(self.val_dataloader)
+            test_iou = running_iou / len(self.val_dataloader)
 
-        self.logger.info(f"Test Accuracy: {test_acc}")
+        self.logger.info(f"Test Accuracy: {test_acc}, Test IoU: {test_iou}")
 
     def compute_iou(self, pred: torch.Tensor, true: torch.Tensor)  -> float:
         eps=1e-6
@@ -199,23 +185,10 @@ class Trainer:
         
         iou = (intersection + eps) / (union + eps)
         
-        # thresholded = torch.clamp(20 * (iou - 0.5), 0, 10).ceil() / 10  # This is equal to comparing with thresolds
-        
         return iou.mean().item()
     
     def accuracy_metric(self, pred: torch.Tensor, true: torch.Tensor) -> float:
         return (pred == true).float().mean().item()
-
-    def compute_accuracy(self, target: torch.Tensor, outputs: torch.Tensor, num_classes: int):
-        labeled = target.ne(0)
-        pred = outputs.sigmoid()
-        # pred = (pred > 0.5).float()
-        pred = pred.argmax(1)
-        correct = (pred == target).float()
-        correct = (correct * labeled).sum()
-        labeled = labeled.sum()
-
-        return labeled, correct
 
     def save_model(self, best: bool = False, epoch: Optional[int] = None):
         if self.run_wandb:
