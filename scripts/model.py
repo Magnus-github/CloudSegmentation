@@ -7,7 +7,6 @@ from torchvision.models.segmentation import DeepLabV3_MobileNet_V3_Large_Weights
 from torchvision.models import resnet34, ResNet34_Weights
 
 
-
 class CloudSegmentationModel(nn.Module):
     def __init__(self, in_channels: int = 4, num_classes: int = 2) -> None:
         super(CloudSegmentationModel, self).__init__()
@@ -22,22 +21,7 @@ class CloudSegmentationModel(nn.Module):
         return self.model(x)
 
 
-# Unet see: https://segmentation-modelspytorch.readthedocs.io/en/latest/#installation
-# class CloudUnet(nn.Module):
-#     def __init__(self, in_channels: int = 4, num_classes: int = 2) -> None:
-#         super(CloudUnet, self).__init__()
-#         self.model = smp.Unet(
-#             encoder_name="mobilenet_v2",
-#             encoder_weights="imagenet",
-#             in_channels=in_channels,
-#             classes=num_classes,
-#         )
-
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         return self.model(x)
-
-
-class UNET(nn.Module):
+class UNET_resnet(nn.Module):
     def __init__(self, in_channels: int = 4, num_classes: int = 2) -> None:
         super().__init__()
         
@@ -90,8 +74,9 @@ class UNET(nn.Module):
 
         return upconv0
 
+
 # https://www.kaggle.com/code/cordmaur/38-cloud-simple-unet
-class UNET_2(nn.Module):
+class UNET_simple(nn.Module):
     def __init__(self, in_channels: int = 4, num_classes: int = 2) -> None:
         super().__init__()
 

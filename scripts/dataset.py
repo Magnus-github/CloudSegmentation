@@ -21,37 +21,30 @@ class Clouds(Dataset):
     def __init__(self, data_folder: str = "",
                  scenes_folder: str = "subscenes",
                  masks_folder: str = "masks",
-                 num_folds: int = 5,
                  transform: str = None,
                  image_size: int = 224,
-                 overlap: int = 112,
-                 mean: list[float] = [0.485, 0.456, 0.406],
-                 std: list[float] = [0.229, 0.224, 0.225],
+                 overlap: int = 30,
                  split: str = "train",
-                 fold: int = 0,
                  random_state: int = 42) -> None:
         super().__init__()
         self._scenes_folder = os.path.join(data_folder, scenes_folder)
         self._masks_folder = os.path.join(data_folder, masks_folder)
 
-        self._transform = str_to_class(transform)(image_size, overlap, mean, std) if transform else BaseTransform
+        self._transform = str_to_class(transform)(image_size, overlap) if transform else BaseTransform()
 
         all_scene_files = sorted(os.listdir(self._scenes_folder))
         all_mask_files = sorted(os.listdir(self._masks_folder))
 
-        # skf = KFold(n_splits=num_folds, shuffle=True, random_state=random_state)
-        # splits = list(skf.split(all_scene_files, all_mask_files))
-        # train_idx, val_test_idx = splits[fold]
         train_idx, val_test_idx = train_test_split(range(len(all_scene_files)), test_size=0.15, random_state=random_state)
-        val_idx, test_idx = train_test_split(val_test_idx, test_size=0.3, random_state=random_state)
+        val_idx, test_idx = train_test_split(val_test_idx, test_size=0.33, random_state=random_state)
 
-        if split == "train":
+        if split == "train": # 85% of the data
             self._scenes_files = [all_scene_files[i] for i in train_idx]
             self._masks_files = [all_mask_files[i] for i in train_idx]
-        elif split == "val":
+        elif split == "val": # 10% of the data
             self._scenes_files = [all_scene_files[i] for i in val_idx]
             self._masks_files = [all_mask_files[i] for i in val_idx]
-        elif split == "test":
+        elif split == "test": # 5% of the data
             self._scenes_files = [all_scene_files[i] for i in test_idx]
             self._masks_files = [all_mask_files[i] for i in test_idx]
         elif split == "all":
@@ -70,6 +63,8 @@ class Clouds(Dataset):
         scene = np.load(os.path.join(self._scenes_folder, scene_file))
         # get only desired bands (RGB and NIR; bands 4, 3, 2, 8)
         scene = scene[:,:,[3,2,1,7]]
+        # normalize to [0, 1]
+        scene = (scene - scene.min()) / (scene.max() - scene.min())
         mask = np.load(os.path.join(self._masks_folder, mask_file))
         # merge 'CLEAR' and 'CLOUD_SHADOW' classes and keep only 'CLOUD' class
         clear_mask = mask[:,:,0] + mask[:,:,2]
@@ -92,34 +87,22 @@ def collate_fn(batch):
 
 
 def get_dataloaders(cfg: omegaconf.DictConfig, fold: int = 0) -> dict[str, DataLoader]:
-    train_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.train_params,fold=fold)
-    val_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.val_params,fold=fold)
-    test_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.test_params,fold=fold)
+    train_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.train_params)
+    val_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.val_params)
+    test_dataset = Clouds(**cfg.dataset.params, **cfg.dataset.test_params)
+    for f_train in train_dataset._scenes_files:
+        for f_val in val_dataset._scenes_files:
+            assert f_train != f_val, f"File {f_train} is in both train and val datasets"
+        for f_test in test_dataset._scenes_files:
+            assert f_train != f_test, f"File {f_train} is in both train and test datasets"
+    for f_val in val_dataset._scenes_files:
+        for f_test in test_dataset._scenes_files:
+            assert f_val != f_test, f"File {f_val} is in both val and test datasets"
     train_dataloader = DataLoader(train_dataset, batch_size=cfg.hparams.batch_size, shuffle=True, collate_fn=collate_fn)
     val_dataloader = DataLoader(val_dataset, batch_size=cfg.hparams.batch_size, shuffle=False, collate_fn=collate_fn)
     test_dataloader = DataLoader(test_dataset, batch_size=cfg.hparams.batch_size, shuffle=False, collate_fn=collate_fn)
     dataloaders = {"train": train_dataloader, "val": val_dataloader, "test": test_dataloader}
     return dataloaders
-
-from tqdm import tqdm
-def calculate_mean_std(data_folder: str):
-    dataset = Clouds(data_folder=data_folder, split="all")
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
-    mean = 0.
-    std = 0.
-    nb_samples = 0.
-    for data, _ in tqdm(dataloader):
-        batch_samples = data.size(0)
-        data = data.view(batch_samples, data.size(1), -1)
-        mean += data.mean(2).sum(0)
-        std += data.std(2).sum(0)
-        nb_samples += batch_samples
-
-    mean /= nb_samples
-    std /= nb_samples
-    print(mean.shape, std.shape)
-    print(mean, std)
-    return mean, std
 
 
 if __name__ == "__main__":

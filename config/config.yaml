@@ -8,11 +8,8 @@ dataset:
         data_folder: /local_storage/users/tibbe/datasets/Sentinel2
         scenes_folder: subscenes
         masks_folder: masks
-        num_folds: 5
         image_size: 224
-        overlap: 0
-        mean: [0.485, 0.456, 0.406, 0.3913] # [0.3612, 0.3414, 0.3745, 0.3913]
-        std: [0.229, 0.224, 0.225, 0.0890] # [0.0848, 0.0724, 0.0714, 0.0890]
+        overlap: 30
     train_params:
         transform: scripts.transforms:TrainTransform # required format: <module_name>:<object_name>
         split: train
@@ -23,31 +20,30 @@ dataset:
         transform: scripts.transforms:ValTransform # required format: <module_name>:<object_name>
         split: test
 model:
-    name: scripts.model:UNET_2 # required format: <module_name>:<object_name>
+    name: scripts.model:UNET_simple # required format: <module_name>:<object_name>
     # save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
     save_path: /local_storage/users/tibbe/Zaitra_Challenge/model
     in_params:
         in_channels: 4
         num_classes: 2
-    load_weights:
-        enable: false
-        path: model/CloudSegmentationModel_final_norm.pth
 hparams:
-    epochs: 50
+    epochs: 30
     batch_size: 1
     save_best_threshold: 0.3
+    visualize_interval: 5
     criterion:
         name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
         in_params: {}
     optimizer: 
         name: torch.optim:Adam
         in_params:
-            lr: 0.01
+            lr: 0.0001
     scheduler:
         name: torch.optim.lr_scheduler:CosineAnnealingLR
         in_params:
             T_max: 20
-            eta_min: 0.01
+            eta_min: 0.001
 wandb:
     enable: true
-    project_name: zaitra_challenge
+    project_name: zaitra_challenge_lrs
+    run_name: unet_simple_0.0001

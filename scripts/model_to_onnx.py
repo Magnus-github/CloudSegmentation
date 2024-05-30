@@ -10,7 +10,7 @@ def convert_model_to_onnx(model_path: str) -> None:
     model.eval()
 
     # Create dummy input tensor
-    dummy_input = torch.randn(1, 4, 224, 224)  # Adjust the shape according to your model's input
+    dummy_input = torch.randn(1, 4, 224, 224)
 
     # Export the model to ONNX format
     onnx_path = model_path.replace('.pth', '.onnx')
