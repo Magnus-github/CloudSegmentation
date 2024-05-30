@@ -109,8 +109,20 @@ if __name__ == "__main__":
     cfg = omegaconf.OmegaConf.load("config/config.yaml")
     dataloaders = get_dataloaders(cfg)
 
-    for i, (scene, mask) in enumerate(dataloaders["train"]):
+    for file in dataloaders["test"].dataset._scenes_files:
+        scene = np.load(os.path.join(dataloaders["test"].dataset._scenes_folder, file))
+        mask = np.load(os.path.join(dataloaders["test"].dataset._masks_folder, file))
+
+        with open("/Volumes/MAGNUS_USB/Zaitra_Challenge/data/test/scenes/" + file, "wb") as f:
+            np.save(f, scene)
+        with open("/Volumes/MAGNUS_USB/Zaitra_Challenge/data/test/masks/" + file, "wb") as f:
+            np.save(f, mask)
+
+    exit()
+    for i, (scene, mask) in enumerate(dataloaders["test"]):
         print(scene.shape, mask.shape)
+
+
 
         save_image(scene[:5,:3], f"scene.png")
         save_image(mask[:5,0].unsqueeze(1).float(), f"mask_clear.png")

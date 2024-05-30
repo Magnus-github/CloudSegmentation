@@ -3,9 +3,9 @@ dataset:
     classes: ['CLEAR', 'CLOUD']
     label_colors: [[0, 0, 0], [255, 255, 255]]
     params:
-        # data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
         # data_folder: /Midgard/Data/tibbe/datasets/Sentinel2
-        data_folder: /local_storage/users/tibbe/datasets/Sentinel2
+        # data_folder: /local_storage/users/tibbe/datasets/Sentinel2
         scenes_folder: subscenes
         masks_folder: masks
         image_size: 224
