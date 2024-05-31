@@ -68,7 +68,8 @@ class Trainer:
 
                 loss.backward()
                 self.optimizer.step()
-                # self.scheduler.step()
+                if self._cfg.hparams.scheduler.enable:
+                    self.scheduler.step()
 
                 if self.run_wandb:
                     self.run_wandb.log({"Train loss [batch]": running_loss / (i + 1)})
@@ -97,8 +98,7 @@ class Trainer:
                 best_val_loss = val_loss
                 self.save_model(best=True)
 
-
-        self.save_model()
+        self.save_model(to_onnx=True)
 
         if self.run_wandb:
             self.run_wandb.finish()
@@ -190,7 +190,7 @@ class Trainer:
     def accuracy_metric(self, pred: torch.Tensor, true: torch.Tensor) -> float:
         return (pred == true).float().mean().item()
 
-    def save_model(self, best: bool = False, epoch: Optional[int] = None):
+    def save_model(self, best: bool = False, epoch: Optional[int] = None, to_onnx: bool = False) -> None:
         if self.run_wandb:
             folder = self.run_wandb.name
         else:
@@ -205,7 +205,22 @@ class Trainer:
         save_path = os.path.join(self._cfg.model.save_path, folder)
         os.makedirs(save_path, exist_ok=True)
 
-        torch.save(self.model.state_dict(), os.path.join(save_path, name))
+        if to_onnx:
+            self.logger.info("Converting model to ONNX!")
+            dummy_input = torch.randn(1, 4, 224, 224)
+            onnx_path = os.path.join(save_path, name.replace(".pth", ".onnx"))
+            torch.onnx.export(
+                self.model.to("cpu"),
+                dummy_input,
+                onnx_path,
+                input_names=["input"],
+                output_names=["output"],
+                dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
+            )
+            self.logger.info(f"Model converted to ONNX and saved at: {onnx_path}")
+            self.model.to(self.device)
+        else:
+            torch.save(self.model.state_dict(), os.path.join(save_path, name))
 
 
 if __name__ == "__main__":
