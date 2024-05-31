@@ -106,27 +106,23 @@ def get_dataloaders(cfg: omegaconf.DictConfig, fold: int = 0) -> dict[str, DataL
 
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
     cfg = omegaconf.OmegaConf.load("config/config.yaml")
     dataloaders = get_dataloaders(cfg)
 
-    for file in dataloaders["test"].dataset._scenes_files:
-        scene = np.load(os.path.join(dataloaders["test"].dataset._scenes_folder, file))
-        mask = np.load(os.path.join(dataloaders["test"].dataset._masks_folder, file))
-
-        with open("/Volumes/MAGNUS_USB/Zaitra_Challenge/data/test/scenes/" + file, "wb") as f:
-            np.save(f, scene)
-        with open("/Volumes/MAGNUS_USB/Zaitra_Challenge/data/test/masks/" + file, "wb") as f:
-            np.save(f, mask)
-
-    exit()
     for i, (scene, mask) in enumerate(dataloaders["test"]):
         print(scene.shape, mask.shape)
 
+        figure = plt.figure(1)
+        plt_im = mask[13].to("cpu").numpy()
+        plt.imshow(mask[13].to("cpu").numpy())
+        plt.title("Ground truth mask")
+        plt.axis("off")
+        plt.imsave("scene.png", plt_im)
 
-
-        save_image(scene[:5,:3], f"scene.png")
-        save_image(mask[:5,0].unsqueeze(1).float(), f"mask_clear.png")
-        save_image(mask[:5,1].unsqueeze(1).float(), f"mask_cloud.png")
+        # save_image(scene[:5,:3], f"scene.png")
+        # save_image(mask[:5,0].unsqueeze(1).float(), f"mask_clear.png")
+        # save_image(mask[:5,1].unsqueeze(1).float(), f"mask_cloud.png")
 
         if i == 10:
             break
