@@ -6,3 +6,4 @@ model/
 logs/
 wandb/
 slurm/
+outputs/

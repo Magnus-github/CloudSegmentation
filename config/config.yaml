@@ -47,3 +47,5 @@ wandb:
     enable: true
     project_name: zaitra_challenge_lrs
     run_name: unet_simple_0.1
+outputs:
+    train_results:  outputs/train_results

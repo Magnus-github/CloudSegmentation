@@ -97,9 +97,11 @@ class Trainer:
                 best_val_loss = val_loss
                 self.save_model(best=True)
 
-
-        with open("results.txt", "a") as f:
-            f.write(f"Model: {self._cfg.model.name}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
+        results_dir = self._cfg.outputs.train_results
+        os.makedirs(results_dir, exist_ok=True)
+        results_file = f"{self._cfg.wandb.run_name+'_' if self._cfg.wandb.run_name else ''}results.txt"
+        with open(os.path.join(results_dir, results_file), "a") as f:
+            f.write(f"Model: {self._cfg.model.name}, Learning Rate: {self.optimizer.param_groups[0]["lr"]}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
         self.save_model()
 
         if self.run_wandb:
