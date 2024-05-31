@@ -26,8 +26,6 @@ class Trainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = str_to_class(cfg.model.name)(**cfg.model.in_params)
         self.model.to(self.device)
-        if cfg.model.load_weights.enable:
-            self.model.load_state_dict(torch.load(cfg.model.load_weights.path, map_location=self.device))
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
         self.test_dataloader = dataloaders["test"]
@@ -46,6 +44,8 @@ class Trainer:
 
     def train(self) -> None:
         self.model.train()
+        columns = ["Image", "Ground truth mask", "Predicted mask"]
+        viz_table = wandb.Table(columns=columns)
         best_val_loss = np.inf
         for epoch in range(self._cfg.hparams.epochs):
             running_loss = 0.0
@@ -75,7 +75,7 @@ class Trainer:
 
             train_loss = running_loss / len(self.train_dataloader)
             train_acc = running_acc / len(self.train_dataloader)
-            val_loss, val_acc, val_iou = self.validate(epoch)
+            val_loss, val_acc, val_iou = self.validate(epoch,viz_table)
 
             self.logger.info(f"Epoch: {epoch}, Loss: {train_loss}, Accuracy: {train_acc}")
             self.logger.info(f"Validation Loss: {val_loss}, Validation Accuracy: {val_acc}")
@@ -98,12 +98,14 @@ class Trainer:
                 self.save_model(best=True)
 
 
+        with open("results.txt", "a") as f:
+            f.write(f"Model: {self._cfg.model.name}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
         self.save_model()
 
         if self.run_wandb:
             self.run_wandb.finish()
 
-    def validate(self,epoch: int = 0) -> tuple[float, float, float]:
+    def validate(self,epoch: int = 0, viz_table: wandb.Table = None) -> tuple[float, float, float]:
         self.model.eval()
         with torch.no_grad():
             running_loss = 0.0
@@ -124,19 +126,29 @@ class Trainer:
 
                 if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
                     self.logger.info("Visualizing!")
-                    figure = plt.figure(1)
-                    plt.subplot(131)
-                    plt.imshow(images[0].permute(1, 2, 0).to("cpu"))
-                    plt.title("Image")
-                    plt.subplot(132)
-                    plt.imshow(masks[0].to("cpu"))
-                    plt.title("Ground truth mask")
-                    plt.subplot(133)
-                    plt.imshow(pred[0].to("cpu"))
-                    plt.title("Predicted mask")
+                    columns = ["Image", "Ground truth mask", "Predicted mask"]
+                    viz_table = wandb.Table(columns=columns)
+                    log_im = images[13,:3].permute(1, 2, 0).to("cpu").numpy()
+                    log_mask = masks[13].to("cpu").numpy()
+                    log_pred = pred[0].to("cpu").numpy()
+                    viz_table.add_data(wandb.Image(log_im), wandb.Image(log_mask), wandb.Image(log_pred))
+                    wandb.log({"test_predictions" : viz_table})
+                    # figure = plt.figure(1)
+                    # plt.subplot(131)
+                    # plt.imshow(images[13,:3].permute(1, 2, 0).to("cpu").numpy())
+                    # plt.title("Image")
+                    # plt.axis("off")
+                    # plt.subplot(132)
+                    # plt.imshow(masks[13].to("cpu").numpy())
+                    # plt.title("Ground truth mask")
+                    # plt.axis("off")
+                    # plt.subplot(133)
+                    # plt.imshow(pred[0].to("cpu").numpy())
+                    # plt.title("Predicted mask")
+                    # plt.axis("off")
 
-                    self.run_wandb.log({"test_img_{i}".format(i=i): figure})
-                    plt.close()
+                    # self.run_wandb.log({"test_img_{i}".format(i=i): figure})
+                    # plt.close()
 
             val_loss = running_loss / len(self.val_dataloader)
             val_acc = running_acc / len(self.val_dataloader)

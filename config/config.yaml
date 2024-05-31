@@ -3,9 +3,9 @@ dataset:
     classes: ['CLEAR', 'CLOUD']
     label_colors: [[0, 0, 0], [255, 255, 255]]
     params:
-        data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        # data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
         # data_folder: /Midgard/Data/tibbe/datasets/Sentinel2
-        # data_folder: /local_storage/users/tibbe/datasets/Sentinel2
+        data_folder: /local_storage/users/tibbe/datasets/Sentinel2
         scenes_folder: subscenes
         masks_folder: masks
         image_size: 224
@@ -30,20 +30,20 @@ hparams:
     epochs: 30
     batch_size: 1
     save_best_threshold: 0.3
-    visualize_interval: 5
+    visualize_interval: 1
     criterion:
         name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
         in_params: {}
     optimizer: 
         name: torch.optim:Adam
         in_params:
-            lr: 0.0001
+            lr: 0.1
     scheduler:
         name: torch.optim.lr_scheduler:CosineAnnealingLR
         in_params:
             T_max: 20
-            eta_min: 0.001
+            eta_min: 0.1 ##########
 wandb:
     enable: true
     project_name: zaitra_challenge_lrs
-    run_name: unet_simple_0.0001
+    run_name: unet_simple_0.1
