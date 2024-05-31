@@ -84,3 +84,9 @@ For testing the model on the test set, simply run:
 
 ### Inference
 For running inference on the saved model, please follow the instructions in the JupyterNotebook.
+
+## Resources
+- https://zenodo.org/records/4172871
+- https://drivendata.co/blog/cloud-cover-benchmark/
+- https://www.kaggle.com/code/cordmaur/38-cloud-simple-unet
+- https://github.com/cloudsen12/models/tree/master
