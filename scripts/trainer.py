@@ -26,6 +26,8 @@ class Trainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = str_to_class(cfg.model.name)(**cfg.model.in_params)
         self.model.to(self.device)
+        if cfg.model.load_weights.enable:
+            self.model.load_state_dict(torch.load(cfg.model.load_weights.path, map_location=self.device))
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
         self.test_dataloader = dataloaders["test"]
@@ -102,7 +104,7 @@ class Trainer:
         os.makedirs(results_dir, exist_ok=True)
         results_file = f"{self._cfg.wandb.run_name+'_' if self._cfg.wandb.run_name else ''}results.txt"
         with open(os.path.join(results_dir, results_file), "a") as f:
-            f.write(f"Model: {self._cfg.model.name}, Learning Rate: {self.optimizer.param_groups[0]["lr"]}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
+            f.write(f"Model: {self._cfg.model.name}, Learning Rate: {self._cfg.hparams.optimizer.in_params.lr}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
 
         self.save_model(to_onnx=True)
 
@@ -137,22 +139,6 @@ class Trainer:
                     log_pred = pred[0].to("cpu").numpy()
                     viz_table.add_data(wandb.Image(log_im), wandb.Image(log_mask), wandb.Image(log_pred))
                     wandb.log({"test_predictions" : viz_table})
-                    # figure = plt.figure(1)
-                    # plt.subplot(131)
-                    # plt.imshow(images[13,:3].permute(1, 2, 0).to("cpu").numpy())
-                    # plt.title("Image")
-                    # plt.axis("off")
-                    # plt.subplot(132)
-                    # plt.imshow(masks[13].to("cpu").numpy())
-                    # plt.title("Ground truth mask")
-                    # plt.axis("off")
-                    # plt.subplot(133)
-                    # plt.imshow(pred[0].to("cpu").numpy())
-                    # plt.title("Predicted mask")
-                    # plt.axis("off")
-
-                    # self.run_wandb.log({"test_img_{i}".format(i=i): figure})
-                    # plt.close()
 
             val_loss = running_loss / len(self.val_dataloader)
             val_acc = running_acc / len(self.val_dataloader)
@@ -180,12 +166,21 @@ class Trainer:
                 running_iou += self.compute_iou(pred, masks)
 
                 im = images[:5,:3].to("cpu")
-                im -= im.min(1, keepdim=True)[0]
-                im /= im.max(1, keepdim=True)[0]
+                # im -= im.min(1, keepdim=True)[0]
+                # im /= im.max(1, keepdim=True)[0]
 
-                save_image(im, f"test_image.png")
-                save_image(masks[:5].unsqueeze(1).to("cpu"), f"test_mask.png")
-                save_image(pred[:5].unsqueeze(1).to("cpu"), f"test_pred.png")
+                figure = plt.figure(1)
+                plt_im_mask_pred  = images[13].to("cpu").numpy().transpose(1,2,0)[:,:,:3]
+                mask_repeat = masks[13].to("cpu").numpy()[None,:,:]
+                mask_repeat = np.repeat(mask_repeat, 3, axis=0).transpose(1,2,0)
+                pred_repeat = pred[13].to("cpu").numpy()[None,:,:]
+                pred_repeat = np.repeat(pred_repeat, 3, axis=0).transpose(1,2,0)
+                plt_im_mask_pred = np.concatenate([plt_im_mask_pred, mask_repeat, pred_repeat], axis=1)
+                plt.imshow(plt_im_mask_pred)
+                plt.title("Scene, mask and prediction")
+                plt.axis("off")
+                plt.imsave(f"scene_mask_pred{i}.png", plt_im_mask_pred)
+
 
             test_acc = running_acc / len(self.val_dataloader)
             test_iou = running_iou / len(self.val_dataloader)
@@ -218,7 +213,7 @@ class Trainer:
         if epoch:
             name = model_name + f"_{epoch}.pth"
 
-        save_path = os.path.join(self._cfg.model.save_path, folder)
+        save_path = os.path.join(self._cfg.outputs.model, folder)
         os.makedirs(save_path, exist_ok=True)
 
         if to_onnx:

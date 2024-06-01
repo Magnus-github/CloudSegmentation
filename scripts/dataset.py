@@ -113,12 +113,19 @@ if __name__ == "__main__":
     for i, (scene, mask) in enumerate(dataloaders["test"]):
         print(scene.shape, mask.shape)
 
+
         figure = plt.figure(1)
-        plt_im = mask[13].to("cpu").numpy()
-        plt.imshow(mask[13].to("cpu").numpy())
-        plt.title("Ground truth mask")
+        plt_im_mask  = scene[13].to("cpu").numpy().transpose(1,2,0)
+        plt_im_mask  = plt_im_mask[:,:,:3]
+        mask_repeat = mask[13].to("cpu").numpy()[None,:,:]
+        mask_repeat = np.repeat(mask_repeat, 3, axis=0).transpose(1,2,0)
+        plt_im_mask = np.concatenate([plt_im_mask, mask_repeat], axis=1)
+        plt.imshow(plt_im_mask)
+        plt.title("Scene and mask")
         plt.axis("off")
-        plt.imsave("scene.png", plt_im)
+        plt.imsave(f"scene_mask{i}.png", plt_im_mask)
+
+        
 
         # save_image(scene[:5,:3], f"scene.png")
         # save_image(mask[:5,0].unsqueeze(1).float(), f"mask_clear.png")

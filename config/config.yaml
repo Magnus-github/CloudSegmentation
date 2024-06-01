@@ -21,8 +21,9 @@ dataset:
         split: test
 model:
     name: scripts.model:UNET_simple # required format: <module_name>:<object_name>
-    # save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
-    save_path: /local_storage/users/tibbe/Zaitra_Challenge/model
+    load_weights:
+        enable: false
+        path: model/UNET_simple_final.pth
     in_params:
         in_channels: 4
         num_classes: 2
@@ -37,16 +38,18 @@ hparams:
     optimizer: 
         name: torch.optim:Adam
         in_params:
-            lr: 0.1
+            lr: 0.0001
     scheduler:
         enable: false
         name: torch.optim.lr_scheduler:CosineAnnealingLR
         in_params:
             T_max: 20
-            eta_min: 0.1 ##########
+            eta_min: 0.0001
 wandb:
-    enable: true
+    enable: false
     project_name: zaitra_challenge_lrs
-    run_name: unet_simple_0.1
+    run_name: unet_simple_0.0001
 outputs:
     train_results:  outputs/train_results
+    # model: outputs/model
+    model: /local_storage/users/tibbe/Zaitra_Challenge/model
