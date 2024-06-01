@@ -6,7 +6,6 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import matplotlib.pyplot as plt
-from torchvision.utils import save_image
 
 from collections import OrderedDict
 
@@ -22,11 +21,15 @@ from scripts.dataset import get_dataloaders
 
 class Trainer:
     def __init__(self, cfg: omegaconf.DictConfig, dataloaders: dict[DataLoader]) -> None:
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(level=logging.INFO)
+
         self._cfg = cfg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = str_to_class(cfg.model.name)(**cfg.model.in_params)
         self.model.to(self.device)
         if cfg.model.load_weights.enable:
+            self.logger.info(f"Loading weights from: {cfg.model.load_weights.path}")
             self.model.load_state_dict(torch.load(cfg.model.load_weights.path, map_location=self.device))
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
@@ -34,8 +37,6 @@ class Trainer:
         self.criterion = str_to_class(cfg.hparams.criterion.name)(**cfg.hparams.criterion.in_params)
         self.optimizer = str_to_class(cfg.hparams.optimizer.name)(self.model.parameters(), **cfg.hparams.optimizer.in_params)
         self.scheduler = str_to_class(cfg.hparams.scheduler.name)(self.optimizer, **cfg.hparams.scheduler.in_params)
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(level=logging.INFO)
         if cfg.wandb.enable:
             self.run_wandb = wandb.init(project=cfg.wandb.project_name, name=cfg.wandb.run_name, config=dict(cfg))
             self.run_wandb.watch(self.model)
@@ -70,8 +71,8 @@ class Trainer:
 
                 loss.backward()
                 self.optimizer.step()
-                if self._cfg.hparams.scheduler.enable:
-                    self.scheduler.step()
+                # if self._cfg.hparams.scheduler.enable:
+                #     self.scheduler.step()
 
                 if self.run_wandb:
                     self.run_wandb.log({"Train loss [batch]": running_loss / (i + 1)})
@@ -79,6 +80,9 @@ class Trainer:
             train_loss = running_loss / len(self.train_dataloader)
             train_acc = running_acc / len(self.train_dataloader)
             val_loss, val_acc, val_iou = self.validate(epoch,viz_table)
+
+            if self._cfg.hparams.scheduler.enable:
+                self.scheduler.step(val_loss)
 
             self.logger.info(f"Epoch: {epoch}, Loss: {train_loss}, Accuracy: {train_acc}")
             self.logger.info(f"Validation Loss: {val_loss}, Validation Accuracy: {val_acc}")
@@ -106,7 +110,7 @@ class Trainer:
         with open(os.path.join(results_dir, results_file), "a") as f:
             f.write(f"Model: {self._cfg.model.name}, Learning Rate: {self._cfg.hparams.optimizer.in_params.lr}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
 
-        self.save_model(to_onnx=True)
+        self.save_model(to_onnx=False)
 
         if self.run_wandb:
             self.run_wandb.finish()
@@ -154,7 +158,7 @@ class Trainer:
         with torch.no_grad():
             running_acc = 0.0
             running_iou = 0.0
-            for i, (images, masks) in enumerate(tqdm(self.test_dataloader)):
+            for i, (images, masks) in enumerate(tqdm(self.train_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
                 outputs = self.model(images)
                 if type(outputs) == OrderedDict:
@@ -181,9 +185,11 @@ class Trainer:
                 plt.axis("off")
                 plt.imsave(f"scene_mask_pred{i}.png", plt_im_mask_pred)
 
+                if i>15:
+                    break
 
-            test_acc = running_acc / len(self.val_dataloader)
-            test_iou = running_iou / len(self.val_dataloader)
+            test_acc = running_acc / 16#len(self.test_dataloader)
+            test_iou = running_iou / 16#len(self.test_dataloader)
 
         self.logger.info(f"Test Accuracy: {test_acc}, Test IoU: {test_iou}")
 
@@ -230,8 +236,8 @@ class Trainer:
             )
             self.logger.info(f"Model converted to ONNX and saved at: {onnx_path}")
             self.model.to(self.device)
-        else:
-            torch.save(self.model.state_dict(), os.path.join(save_path, name))
+        
+        torch.save(self.model.state_dict(), os.path.join(save_path, name))
 
 
 if __name__ == "__main__":

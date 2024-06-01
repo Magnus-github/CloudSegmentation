@@ -20,35 +20,36 @@ dataset:
         transform: scripts.transforms:ValTransform # required format: <module_name>:<object_name>
         split: test
 model:
-    name: scripts.model:UNET_simple # required format: <module_name>:<object_name>
+    name: scripts.model:CloudSegmentationModel # required format: <module_name>:<object_name>
     load_weights:
         enable: false
-        path: model/UNET_simple_final.pth
+        path: model/DeepLabv3_ReduceLROnPlateau_final.pth
     in_params:
         in_channels: 4
         num_classes: 2
 hparams:
-    epochs: 30
+    epochs: 60
     batch_size: 1
     save_best_threshold: 0.3
     visualize_interval: 1
     criterion:
-        name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
+        name: torch.nn:CrossEntropyLoss  # scripts.loss:DiceBCELoss # required format: <module_name>:<object_name>
         in_params: {}
     optimizer: 
         name: torch.optim:Adam
         in_params:
-            lr: 0.0001
+            lr: 0.01
     scheduler:
-        enable: false
-        name: torch.optim.lr_scheduler:CosineAnnealingLR
+        enable: true
+        name: torch.optim.lr_scheduler:ReduceLROnPlateau
         in_params:
-            T_max: 20
-            eta_min: 0.0001
+            factor: 0.5
+            mode: min
+            min_lr: 0.00001
 wandb:
     enable: false
     project_name: zaitra_challenge_lrs
-    run_name: unet_simple_0.0001
+    run_name: DeepLabv3_ReduceLROnPlateau
 outputs:
     train_results:  outputs/train_results
     # model: outputs/model

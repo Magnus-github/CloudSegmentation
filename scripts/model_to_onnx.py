@@ -2,11 +2,13 @@ import torch
 
 import torch.onnx as onnx
 
-from model import UNET
+# import sys
+# sys.path.append('scripts/')
+from model import UNET_simple
 
 def convert_model_to_onnx(model_path: str) -> None:
     # Load the PyTorch model
-    model = UNET(in_channels=4, num_classes=2)
+    model = UNET_simple(in_channels=4, num_classes=2)
     model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model.eval()
 
@@ -26,5 +28,5 @@ def convert_model_to_onnx(model_path: str) -> None:
 
 
 if __name__ == '__main__':
-    model_path = 'model/UNET_final_1.pth'
+    model_path = 'model/UNET_simple_final.pth'
     convert_model_to_onnx(model_path)

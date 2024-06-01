@@ -13,12 +13,15 @@ def main(args: argparse.Namespace) -> None:
     cfg = omegaconf.OmegaConf.load(args.config)
     dataloaders = get_dataloaders(cfg)
 
-    trainer = Trainer(cfg, dataloaders)
-
     if args.mode == "train":
-        trainer.train()
+        for lr in [0.01, 0.005, 0.001, 0.0005, 0.0001]:
+            cfg.hparams.optimizer.in_params.lr = lr
+            cfg.wandb.run_name =  f"DeepLabv3_{str(lr)}_CELoss"
+            trainer = Trainer(cfg, dataloaders)
+            trainer.train()
     elif args.mode == "test":
-        cfg.model.load_weights = True
+        cfg.model.load_weights.enable = True
+        trainer = Trainer(cfg, dataloaders)
         trainer.test()
 
 
