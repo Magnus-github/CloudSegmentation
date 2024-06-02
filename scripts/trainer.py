@@ -154,6 +154,7 @@ class Trainer:
     
 
     def test(self):
+        os.makedirs(self._cfg.outputs.test, exist_ok=True)
         self.model.eval()
         with torch.no_grad():
             running_acc = 0.0
@@ -179,13 +180,10 @@ class Trainer:
                 plt.imshow(plt_im_mask_pred)
                 plt.title("Scene, mask and prediction")
                 plt.axis("off")
-                plt.imsave(f"scene_mask_pred{i}.png", plt_im_mask_pred)
+                plt.imsave(f"{self._cfg.outputs.test}/scene_mask_pred{i}.png", plt_im_mask_pred)
 
-                if i>15:
-                    break
-
-            test_acc = running_acc / 16#len(self.test_dataloader)
-            test_iou = running_iou / 16#len(self.test_dataloader)
+            test_acc = running_acc / len(self.test_dataloader)
+            test_iou = running_iou / len(self.test_dataloader)
 
         self.logger.info(f"Test Accuracy: {test_acc}, Test IoU: {test_iou}")
 
