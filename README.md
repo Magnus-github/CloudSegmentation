@@ -69,7 +69,7 @@ Finally, here are some visualized predictions on the test set of the best model 
 
 |![Good prediction](docs/DeepLab_goodpred.png)|
 |:-:|
-|Good prediction (image, GT, pred)|
+|Okay prediction (image, GT, pred)|
 
 |![Wow prediction](docs/DeepLab_wow.png)|
 |:-:|
