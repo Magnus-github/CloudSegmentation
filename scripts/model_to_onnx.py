@@ -1,14 +1,14 @@
 import torch
 import torch.onnx as onnx
 
-# import sys
-# sys.path.append('scripts/')
+import sys
+sys.path.append('.')
 from utils import str_to_class
 
 
 def convert_model_to_onnx(model_path: str, model_name: str) -> None:
     # Load the PyTorch model
-    model = str_to_class(model_name)(in_channels=4, num_classes=2)
+    model = str_to_class(f"scripts.model:{model_name}")(in_channels=4, num_classes=2)
     model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model.eval()
 
@@ -28,5 +28,5 @@ def convert_model_to_onnx(model_path: str, model_name: str) -> None:
 
 
 if __name__ == '__main__':
-    model_path = 'model/UNET_simple_final.pth'
-    convert_model_to_onnx(model_path, model_name='UNET_simple')
+    model_path = 'model/DeepLabv3_best.pth'
+    convert_model_to_onnx(model_path, model_name='CloudSegmentationModel')
