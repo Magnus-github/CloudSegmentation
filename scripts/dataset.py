@@ -110,7 +110,7 @@ if __name__ == "__main__":
     cfg = omegaconf.OmegaConf.load("config/config.yaml")
     dataloaders = get_dataloaders(cfg)
 
-    for i, (scene, mask) in enumerate(dataloaders["test"]):
+    for i, (scene, mask) in enumerate(dataloaders["train"]):
         print(scene.shape, mask.shape)
 
 
