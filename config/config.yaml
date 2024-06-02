@@ -3,15 +3,13 @@ dataset:
     classes: ['CLEAR', 'CLOUD']
     label_colors: [[0, 0, 0], [255, 255, 255]]
     params:
-        data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
+        # data_folder: /Volumes/MAGNUS_USB/Zaitra_Challenge/data
         # data_folder: /Midgard/Data/tibbe/datasets/Sentinel2
+        data_folder: /local_storage/users/tibbe/datasets/Sentinel2
         scenes_folder: subscenes
         masks_folder: masks
-        num_folds: 5
         image_size: 224
-        overlap: 0
-        mean: [0.3612, 0.3414, 0.3745, 0.3913]
-        std: [0.0848, 0.0724, 0.0714, 0.0890]
+        overlap: 30
     train_params:
         transform: scripts.transforms:TrainTransform # required format: <module_name>:<object_name>
         split: train
@@ -23,23 +21,37 @@ dataset:
         split: test
 model:
     name: scripts.model:CloudSegmentationModel # required format: <module_name>:<object_name>
-    save_path: /Volumes/MAGNUS_USB/Zaitra_Challenge/model
-    # save_path: /local_storage/users/tibbe/Zaitra_Challenge/model
-    in_params:
-        num_classes: 2
     load_weights:
         enable: false
-        path: model/CloudSegmentationModel_final_norm.pth
+        path: model/DeepLabv3_best.pth
+    in_params:
+        in_channels: 4
+        num_classes: 2
 hparams:
-    epochs: 30
+    epochs: 60
     batch_size: 1
     save_best_threshold: 0.3
+    visualize_interval: 1
     criterion:
-        name: torch.nn:CrossEntropyLoss # required format: <module_name>:<object_name>
-        in_params: {reduction: 'none'}
+        name: torch.nn:CrossEntropyLoss  # scripts.loss:DiceBCELoss # required format: <module_name>:<object_name>
+        in_params: {}
     optimizer: 
         name: torch.optim:Adam
         in_params:
-            lr: 0.001
+            lr: 0.01
+    scheduler:
+        enable: true
+        name: torch.optim.lr_scheduler:ReduceLROnPlateau
+        in_params:
+            factor: 0.5
+            mode: min
+            min_lr: 0.00001
 wandb:
     enable: false
+    project_name: zaitra_challenge_lrs
+    run_name: DeepLabv3_ReduceLROnPlateau
+outputs:
+    train_results:  outputs/train_results
+    model: outputs/model
+    # model: /local_storage/users/tibbe/Zaitra_Challenge/model
+    test: outputs/test

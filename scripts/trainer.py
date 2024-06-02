@@ -6,9 +6,8 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import matplotlib.pyplot as plt
-from torchvision.utils import save_image
 
-import time
+from collections import OrderedDict
 
 import omegaconf
 from typing import Optional
@@ -22,22 +21,24 @@ from scripts.dataset import get_dataloaders
 
 class Trainer:
     def __init__(self, cfg: omegaconf.DictConfig, dataloaders: dict[DataLoader]) -> None:
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(level=logging.INFO)
+
         self._cfg = cfg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = str_to_class(cfg.model.name)(**cfg.model.in_params)
         self.model.to(self.device)
         if cfg.model.load_weights.enable:
+            self.logger.info(f"Loading weights from: {cfg.model.load_weights.path}")
             self.model.load_state_dict(torch.load(cfg.model.load_weights.path, map_location=self.device))
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
         self.test_dataloader = dataloaders["test"]
         self.criterion = str_to_class(cfg.hparams.criterion.name)(**cfg.hparams.criterion.in_params)
         self.optimizer = str_to_class(cfg.hparams.optimizer.name)(self.model.parameters(), **cfg.hparams.optimizer.in_params)
-
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(level=logging.INFO)
+        self.scheduler = str_to_class(cfg.hparams.scheduler.name)(self.optimizer, **cfg.hparams.scheduler.in_params)
         if cfg.wandb.enable:
-            self.run_wandb = wandb.init(project="Zaitra_CloudSegmentation", config=dict(cfg))
+            self.run_wandb = wandb.init(project=cfg.wandb.project_name, name=cfg.wandb.run_name, config=dict(cfg))
             self.run_wandb.watch(self.model)
         else:
             self.run_wandb = None
@@ -46,35 +47,42 @@ class Trainer:
 
     def train(self) -> None:
         self.model.train()
+        columns = ["Image", "Ground truth mask", "Predicted mask"]
+        viz_table = wandb.Table(columns=columns)
         best_val_loss = np.inf
         for epoch in range(self._cfg.hparams.epochs):
             running_loss = 0.0
-            running_label = 0
-            running_correct = 0
+            running_acc = 0.0
             for i, (images, masks) in enumerate(tqdm(self.train_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
                 self.optimizer.zero_grad()
 
-                outputs = self.model(images)["out"]
-                print(outputs.shape, masks.shape)
+                outputs = self.model(images)
+                if type(outputs) == OrderedDict:
+                    outputs = outputs["out"]
+
+                prob = outputs.sigmoid()
 
                 loss = self.criterion(outputs, masks)
                 running_loss += loss.item()
 
-                labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
-                running_label += labeled.sum()
-                running_correct += correct
+                acc = self.accuracy_metric(prob.argmax(1), masks)
+                running_acc += acc
 
                 loss.backward()
                 self.optimizer.step()
-                # self.scheduler.step()
+                # if self._cfg.hparams.scheduler.enable:
+                #     self.scheduler.step()
 
                 if self.run_wandb:
                     self.run_wandb.log({"Train loss [batch]": running_loss / (i + 1)})
 
             train_loss = running_loss / len(self.train_dataloader)
-            train_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
-            val_loss, val_acc = self.validate(epoch)
+            train_acc = running_acc / len(self.train_dataloader)
+            val_loss, val_acc, val_iou = self.validate(epoch,viz_table)
+
+            if self._cfg.hparams.scheduler.enable:
+                self.scheduler.step(val_loss)
 
             self.logger.info(f"Epoch: {epoch}, Loss: {train_loss}, Accuracy: {train_acc}")
             self.logger.info(f"Validation Loss: {val_loss}, Validation Accuracy: {val_acc}")
@@ -85,6 +93,8 @@ class Trainer:
                         "Train Accuracy": train_acc,
                         "Validation loss": val_loss,
                         "Validation accuracy": val_acc,
+                        "Validation IoU": val_iou,
+                        "Learning rate": self.optimizer.param_groups[0]["lr"],
                         "Epoch": epoch,
                     }
                 )            
@@ -94,86 +104,104 @@ class Trainer:
                 best_val_loss = val_loss
                 self.save_model(best=True)
 
-        self.save_model()
+        results_dir = self._cfg.outputs.train_results
+        os.makedirs(results_dir, exist_ok=True)
+        results_file = f"{self._cfg.wandb.run_name+'_' if self._cfg.wandb.run_name else ''}results.txt"
+        with open(os.path.join(results_dir, results_file), "a") as f:
+            f.write(f"Model: {self._cfg.model.name}, Learning Rate: {self._cfg.hparams.optimizer.in_params.lr}, Loss: {val_loss}, Accuracy: {val_acc}, IoU: {val_iou}\n")
+
+        self.save_model(to_onnx=False)
 
         if self.run_wandb:
             self.run_wandb.finish()
 
-    def validate(self, epoch: int):
+    def validate(self,epoch: int = 0, viz_table: wandb.Table = None) -> tuple[float, float, float]:
         self.model.eval()
         with torch.no_grad():
             running_loss = 0.0
-            running_label = 0
-            running_correct = 0
+            running_acc = 0.0
+            running_iou = 0.0
             for i, (images, masks) in enumerate(tqdm(self.val_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
-                outputs = self.model(images)["out"]
+                outputs = self.model(images)
+                if type(outputs) == OrderedDict:
+                    outputs = outputs["out"]
+                prob = outputs.sigmoid()
                 loss = self.criterion(outputs, masks)
                 running_loss += loss.item()
-                labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
-                running_label += labeled.sum()
-                running_correct += correct
+                pred = prob.argmax(1)
+                acc = self.accuracy_metric(pred, masks)
+                running_acc += acc
+                running_iou += self.compute_iou(pred, masks)
 
-                # if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
-                #     self.logger.info("Visualizing!")
-                #     figure = plt.figure(1)
-                #     plt.subplot(131)
-                #     plt.imshow(images[0].permute(1, 2, 0).to("cpu"))
-                #     plt.title("Image")
-                #     plt.subplot(132)
-                #     plt.imshow(masks[0].to("cpu"))
-                #     plt.title("Ground truth mask")
-                #     plt.subplot(133)
-                #     plt.imshow(outputs[0].argmax(0).to("cpu"))
-                #     plt.title("Predicted mask")
-
-                #     self.run_wandb.log({"test_img_{i}".format(i=i): figure})
-                #     plt.close()
+                if self.run_wandb and epoch % self._cfg.hparams.visualize_interval == 0 and i < 5:
+                    self.logger.info("Visualizing!")
+                    columns = ["Image", "Ground truth mask", "Predicted mask"]
+                    viz_table = wandb.Table(columns=columns)
+                    log_im = images[13,:3].permute(1, 2, 0).to("cpu").numpy()
+                    log_mask = masks[13].to("cpu").numpy()
+                    log_pred = pred[0].to("cpu").numpy()
+                    viz_table.add_data(wandb.Image(log_im), wandb.Image(log_mask), wandb.Image(log_pred))
+                    wandb.log({"test_predictions" : viz_table})
 
             val_loss = running_loss / len(self.val_dataloader)
-            val_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
+            val_acc = running_acc / len(self.val_dataloader)
+            val_iou = running_iou / len(self.val_dataloader)
 
         self.model.train()
 
-        return val_loss, val_acc
+        return val_loss, val_acc, val_iou
     
 
     def test(self):
+        os.makedirs(self._cfg.outputs.test, exist_ok=True)
         self.model.eval()
         with torch.no_grad():
-            running_label = 0
-            running_correct = 0
+            running_acc = 0.0
+            running_iou = 0.0
             for i, (images, masks) in enumerate(tqdm(self.test_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
-                outputs = self.model(images)["out"]
-                labeled, correct = self.compute_accuracy(masks, outputs, self._cfg.model.in_params.num_classes)
-                running_label += labeled.sum()
-                running_correct += correct
-                pred = outputs.argmax(1).float()
+                outputs = self.model(images)
+                if type(outputs) == OrderedDict:
+                    outputs = outputs["out"]
+                prob = outputs.sigmoid()
+                pred = prob.argmax(1)
+                acc = self.accuracy_metric(pred, masks)
+                running_acc += acc
+                running_iou += self.compute_iou(pred, masks)
 
-                im = images[:5,:3].to("cpu")
-                im -= im.min(1, keepdim=True)[0]
-                im /= im.max(1, keepdim=True)[0]
+                figure = plt.figure(1)
+                plt_im_mask_pred  = images[13].to("cpu").numpy().transpose(1,2,0)[:,:,:3]
+                mask_repeat = masks[13].to("cpu").numpy()[None,:,:]
+                mask_repeat = np.repeat(mask_repeat, 3, axis=0).transpose(1,2,0)
+                pred_repeat = pred[13].to("cpu").numpy()[None,:,:]
+                pred_repeat = np.repeat(pred_repeat, 3, axis=0).transpose(1,2,0)
+                plt_im_mask_pred = np.concatenate([plt_im_mask_pred, mask_repeat, pred_repeat], axis=1)
+                plt.imshow(plt_im_mask_pred)
+                plt.title("Scene, mask and prediction")
+                plt.axis("off")
+                plt.imsave(f"{self._cfg.outputs.test}/scene_mask_pred{i}.png", plt_im_mask_pred)
 
-                save_image(im, f"test_image.png")
-                save_image(masks[:5].unsqueeze(1).to("cpu"), f"test_mask.png")
-                save_image(pred[:5].unsqueeze(1).to("cpu"), f"test_pred.png")
+            test_acc = running_acc / len(self.test_dataloader)
+            test_iou = running_iou / len(self.test_dataloader)
 
-            test_acc = ((1.0 * running_correct) / (np.spacing(1) + running_label)) * 100
+        self.logger.info(f"Test Accuracy: {test_acc}, Test IoU: {test_iou}")
 
-        self.logger.info(f"Test Accuracy: {test_acc}")
+    def compute_iou(self, pred: torch.Tensor, true: torch.Tensor)  -> float:
+        eps=1e-6
+        pred = pred.int().cpu()
+        true = true.int().cpu()
+        intersection = (pred & true).float().sum((1, 2))
+        union = (pred | true).float().sum((1, 2))
+        
+        iou = (intersection + eps) / (union + eps)
+        
+        return iou.mean().item()
+    
+    def accuracy_metric(self, pred: torch.Tensor, true: torch.Tensor) -> float:
+        return (pred == true).float().mean().item()
 
-
-
-    def compute_accuracy(self, target: torch.Tensor, outputs: torch.Tensor, num_classes: int):
-        labeled = target.ne(0)
-        correct = (outputs.argmax(1) == target).float()
-        correct = (correct * labeled).sum()
-        labeled = labeled.sum()
-
-        return labeled, correct
-
-    def save_model(self, best: bool = False, epoch: Optional[int] = None):
+    def save_model(self, best: bool = False, epoch: Optional[int] = None, to_onnx: bool = False) -> None:
         if self.run_wandb:
             folder = self.run_wandb.name
         else:
@@ -185,9 +213,24 @@ class Trainer:
         if epoch:
             name = model_name + f"_{epoch}.pth"
 
-        save_path = os.path.join(self._cfg.model.save_path, folder)
+        save_path = os.path.join(self._cfg.outputs.model, folder)
         os.makedirs(save_path, exist_ok=True)
 
+        if to_onnx:
+            self.logger.info("Converting model to ONNX!")
+            dummy_input = torch.randn(1, 4, 224, 224)
+            onnx_path = os.path.join(save_path, name.replace(".pth", ".onnx"))
+            torch.onnx.export(
+                self.model.to("cpu"),
+                dummy_input,
+                onnx_path,
+                input_names=["input"],
+                output_names=["output"],
+                dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
+            )
+            self.logger.info(f"Model converted to ONNX and saved at: {onnx_path}")
+            self.model.to(self.device)
+        
         torch.save(self.model.state_dict(), os.path.join(save_path, name))
 
 
@@ -198,4 +241,4 @@ if __name__ == "__main__":
     dataloaders = get_dataloaders(cfg)
 
     trainer = Trainer(cfg, dataloaders)
-    trainer.test()
+    trainer.train()
