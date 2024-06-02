@@ -56,7 +56,7 @@ For evaluating the model, we implemented the pixel-wise accuracy and the interse
 | DeepLab_lr=0.0001 | 0.82     | 0.60     | 0.39     |
 
 
-Additionally, the plots below show the loss curves and the validation IoU for the different learning rates:
+Additionally, the plots below show the loss curves and the validation IoU for the different learning rates. It can be seen, that the DeepLabv3 model seems to be slightly better than the UNET.
 
 
 <p float="left">
