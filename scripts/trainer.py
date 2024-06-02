@@ -158,7 +158,7 @@ class Trainer:
         with torch.no_grad():
             running_acc = 0.0
             running_iou = 0.0
-            for i, (images, masks) in enumerate(tqdm(self.train_dataloader)):
+            for i, (images, masks) in enumerate(tqdm(self.test_dataloader)):
                 images, masks = images.to(self.device), masks.to(self.device)
                 outputs = self.model(images)
                 if type(outputs) == OrderedDict:
@@ -168,10 +168,6 @@ class Trainer:
                 acc = self.accuracy_metric(pred, masks)
                 running_acc += acc
                 running_iou += self.compute_iou(pred, masks)
-
-                im = images[:5,:3].to("cpu")
-                # im -= im.min(1, keepdim=True)[0]
-                # im /= im.max(1, keepdim=True)[0]
 
                 figure = plt.figure(1)
                 plt_im_mask_pred  = images[13].to("cpu").numpy().transpose(1,2,0)[:,:,:3]
