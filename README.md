@@ -22,12 +22,16 @@ Since the input of the model should be of size [224x224], we will tile the raw s
 
 $$ overlap = { ⌈orig\_size/224⌉*224 - orig\_size \over ⌊orig\_size/224⌋} $$
 
-
+|![augmentation_example](docs/augmentation_example.png)|
+| :-: |
+| *Augmetation example* |
 
 ## Model
 At first, I implemented the DeepLabv3 segmentation model with a MobileNet backbone, because it is a relatively small model that I have trained and deployed on hardware before. However, after some initial tests, I was not satisfied with the results and decided to implement a UNET, because UNETs are known to perform very well on segmentation tasks. I tried using a pretrained ResNet34 as the encoder but eventually ended up with just a simple UNET from scratch (I used the implementation from [this kaggle notebook](https://www.kaggle.com/code/cordmaur/38-cloud-simple-unet)). All three models can be found in the [model.py](scripts/model.py). An illustration of the UNET architecture can be seen here:
 
-![UNET architecture](docs/unet_arch.png)
+|![UNET architecture](docs/unet_arch.png)|
+|:-:|
+|UNET architecture|
 
 
 ##  Training
@@ -68,7 +72,7 @@ To set up the environment, create a virutal environment and install the requirme
 
     python -m venv venv
     source venv/bin/activate
-    pip install -r  requirements.txt
+    pip install -r requirements.txt
 
 ### Dataset
 Download the dataset from [Sentinel-2 Cloud Mask Catalogue](https://zenodo.org/records/4172871) and change the *dataset.params.data_folder* paramter in the [config.yaml](config/config.yaml) to the directory where you saved the dataset (this  directory should contain two separate folders for the masks and the satellite images).
@@ -85,7 +89,7 @@ Before running the training, make sure the configuration is as you want it in th
 
     python main.py --mode train
 
-The script will start the training loop and save the final validation metrics in a TXT file in a specified output folder. Additionally to the validation metrics the model is saved in ONNX format. If your device has a GPU and PyTorch cuda installed, it will automatically run on the GPU, otherwise it will run on CPU. Note, that the training is very slow on CPU. The PyTorch model will be saved to the directory specified in *outputs.model*  in the config.
+The script will start the training loop and save the final validation metrics in a TXT file in a specified output folder. Additionally to the validation metrics the model is saved in ONNX format. If your machine has a GPU and PyTorch cuda installed, it will automatically run on the GPU, otherwise it will run on CPU. Note, that the training is very slow on CPU. The PyTorch model will be saved to the directory specified in *outputs.model*  in the config.
 
 ### Testing
 For testing, specify the weights path in *model.load_weights.path* in the config file and then simply run:
