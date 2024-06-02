@@ -20,7 +20,7 @@ The dataset consists of 513 [1022x1022] pixel sub-scenes, annotated to three cla
 ### Dataloading and Augmentations
 Since the input of the model should be of size [224x224], we will tile the raw scenes into (overlapping) patches of the desired size. We choose 30px as the amount of overlap, because without any overlap, we would loose around 1.5\% of the image. The minimum overlap to be able to use the entire scene can be calculated with the formula below. We apply random geometric augmentations (horizontal/vertical flip, rotation) as a form of regularization.
 
-$$ overlap = { ⌈orig\_size/224⌉*224 - orig\_size \over ⌊orig\_size/224⌋} $$
+$$ overlap = { ⌈origsize/224⌉*224 - origsize \over ⌊origsize/224⌋} $$
 
 |![augmentation_example](docs/augmentation_example.png)|
 | :-: |
