@@ -20,7 +20,7 @@ The dataset consists of 513 [1022x1022] pixel sub-scenes, annotated to three cla
 ### Dataloading and Augmentations
 Since the input of the model should be of size [224x224], we will tile the raw scenes into (overlapping) patches of the desired size. We choose 30px as the amount of overlap, because without any overlap, we would loose around 1.5\% of the image. The minimum overlap to be able to use the entire scene can be calculated with the formula below. We apply random geometric augmentations (horizontal/vertical flip, rotation) as a form of regularization.
 
-$$ overlap = { ⌈origsize/224⌉*224 - origsize \over ⌊origsize/224⌋} $$
+$$ overlap = { ⌈orig\_size/224⌉*224 - orig\_size \over ⌊orig\_size/224⌋} $$
 
 |![augmentation_example](docs/augmentation_example.png)|
 | :-: |
@@ -64,6 +64,20 @@ Additionally, the plots below show the loss curves and the validation IoU for th
   <img src="docs/val_loss_DeepLabvsUNET.png" />
   <img src="docs/val_iou_DeepLabvsUNET.png" /> 
 </p>
+
+Finally, here are some visualized predictions on the test set of the best model (DeepLabv3) according to the validation metrics:
+
+|![Good prediction](docs/DeepLab_goodpred.png)|
+|:-:|
+|Good prediction (image, GT, pred)|
+
+|![Wow prediction](docs/DeepLab_wow.png)|
+|:-:|
+|Interesting case ... prediction looks better than GT (image, GT, pred)|
+
+|![Bad prediction](docs/DeepLabv3_badpred.png)|
+|:-:|
+|Bad prediction (image, GT, pred)|
 
 
 ## How to run
